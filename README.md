@@ -2,6 +2,10 @@
 
 A full-stack TMS demo for freight logistics: **tender loads, dispatch drivers and trucks, track the fleet live on a map, and bill customers automatically** — built with **Next.js 15 (App Router) + NestJS 11 + PostgreSQL + Redis**.
 
+**Live demo:** <https://gfs-tms-is1u.onrender.com> — sign in as `dispatcher@gfs.demo` / `Demo1234!` · API docs: <https://gfs-tms-api-is1u.onrender.com/api/docs>
+
+> Hosted on free tiers: if nobody has visited for ~15 minutes the servers are asleep, and the first load can take up to a minute.
+
 ![Dashboard](docs/screenshots/dashboard.png)
 
 | Live tracking | Load detail |
@@ -111,7 +115,11 @@ docker compose exec api pnpm db:seed     # load demo data (first run)
 
 Open <http://localhost:3000>.
 
-### Option B — Local development
+### Option B — Render (Blueprint)
+
+[`render.yaml`](render.yaml) provisions the API, the web app and Redis (Key Value) on Render. PostgreSQL is external (the live demo uses [Neon](https://neon.tech)): create the Blueprint, paste the database URL for `DATABASE_URL`, and on its first boot the API applies migrations and seeds demo data.
+
+### Option C — Local development
 
 Requirements: Node 20+, pnpm 10, PostgreSQL 15+, Redis 6+.
 
@@ -215,5 +223,7 @@ Built with AI-assisted development (Claude Code) for scaffolding, refactoring, t
 - Yuk yetkazilganda invoice **avtomatik** yaratiladi (BullMQ). Buxgalter **idempotent** to'lovlarni kiritadi va debitorlik qarzini muddatlar bo'yicha ko'radi.
 - Xavfsizlik: JWT va refresh token rotatsiyasi, RBAC (Admin / Dispatcher / Accountant / Driver).
 - Testlar: Jest, React Testing Library, Supertest e2e. CI: GitHub Actions. Docker bilan bitta buyruqda ishga tushadi.
+
+Jonli demo: <https://gfs-tms-is1u.onrender.com>.
 
 Ishga tushirish: `docker compose up --build`, keyin `docker compose exec api pnpm db:seed`. Kirish uchun `dispatcher@gfs.demo` / `Demo1234!`.
