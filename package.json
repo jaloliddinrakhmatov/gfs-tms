@@ -1,0 +1,23 @@
+{
+  "name": "gfs-tms",
+  "private": true,
+  "version": "1.0.0",
+  "description": "GFS TMS — Transportation Management System demo (Next.js + NestJS)",
+  "packageManager": "pnpm@10.12.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --stream dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,css,json,md}\"",
+    "db:setup": "pnpm --filter @gfs/api db:setup",
+    "db:seed": "pnpm --filter @gfs/api db:seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}

@@ -1,0 +1,265 @@
+// GFS TMS — data model
+// Money is always stored as integer cents. Distances in meters, durations in seconds.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  DISPATCHER
+  ACCOUNTANT
+  DRIVER
+}
+
+enum DriverStatus {
+  AVAILABLE
+  ON_DUTY
+  OFF_DUTY
+}
+
+enum VehicleStatus {
+  ACTIVE
+  IDLE
+  MAINTENANCE
+}
+
+enum Equipment {
+  DRY_VAN
+  REEFER
+  FLATBED
+}
+
+enum ShipmentStatus {
+  PENDING
+  ASSIGNED
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum Priority {
+  STANDARD
+  EXPEDITED
+}
+
+enum ShipmentEventType {
+  CREATED
+  ASSIGNED
+  UNASSIGNED
+  PICKED_UP
+  DELIVERED
+  CANCELLED
+  NOTE
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum PaymentMethod {
+  ACH
+  WIRE
+  CARD
+  CHECK
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  driver        Driver?
+  refreshTokens RefreshToken[]
+  events        ShipmentEvent[]
+  payments      Payment[]
+}
+
+/// Refresh tokens are stored hashed and rotated on every use (reuse detection).
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  family    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  userAgent String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([family])
+}
+
+model Driver {
+  id            String       @id @default(cuid())
+  userId        String?      @unique
+  name          String
+  phone         String
+  licenseNumber String       @unique
+  status        DriverStatus @default(AVAILABLE)
+  rating        Float        @default(5)
+  hosHoursLeft  Float        @default(11) /// Hours-of-service remaining today
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  vehicle   Vehicle?
+  shipments Shipment[]
+}
+
+model Vehicle {
+  id          String        @id @default(cuid())
+  unitNumber  String        @unique
+  make        String
+  model       String
+  year        Int
+  plate       String        @unique
+  vin         String        @unique
+  equipment   Equipment     @default(DRY_VAN)
+  capacityLbs Int
+  status      VehicleStatus @default(ACTIVE)
+  odometerMi  Int           @default(0)
+  fuelPct     Int           @default(100)
+  driverId    String?       @unique
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  driver    Driver?    @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  shipments Shipment[]
+}
+
+model Customer {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  contactName      String
+  email            String
+  phone            String
+  cityCode         String
+  paymentTermsDays Int      @default(30)
+  createdAt        DateTime @default(now())
+
+  shipments Shipment[]
+  invoices  Invoice[]
+}
+
+model Shipment {
+  id              String         @id @default(cuid())
+  reference       String         @unique
+  customerId      String
+  originCode      String
+  destinationCode String
+  status          ShipmentStatus @default(PENDING)
+  priority        Priority       @default(STANDARD)
+  equipment       Equipment      @default(DRY_VAN)
+  commodity       String
+  weightLbs       Int
+  rateCents       Int
+  distanceMeters  Int
+  durationSeconds Int
+  /// Polyline as [[lat, lng], ...]
+  route           Json
+  /// 0..1 — fraction of route distance travelled
+  progress        Float          @default(0)
+  pickupAt        DateTime
+  deliveryBy      DateTime
+  pickedUpAt      DateTime?
+  deliveredAt     DateTime?
+  driverId        String?
+  vehicleId       String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  customer Customer        @relation(fields: [customerId], references: [id])
+  driver   Driver?         @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle  Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  events   ShipmentEvent[]
+  invoice  Invoice?
+
+  @@index([status])
+  @@index([customerId])
+  @@index([createdAt])
+  @@index([deliveredAt])
+  @@index([driverId])
+  @@index([vehicleId])
+}
+
+model ShipmentEvent {
+  id         String            @id @default(cuid())
+  shipmentId String
+  type       ShipmentEventType
+  message    String
+  actorId    String?
+  createdAt  DateTime          @default(now())
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  actor    User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([shipmentId, createdAt])
+  @@index([createdAt])
+}
+
+model Invoice {
+  id                 String        @id @default(cuid())
+  number             String        @unique
+  shipmentId         String        @unique
+  customerId         String
+  lineHaulCents      Int
+  fuelSurchargeCents Int
+  accessorialCents   Int           @default(0)
+  totalCents         Int
+  paidCents          Int           @default(0)
+  status             InvoiceStatus @default(ISSUED)
+  issuedAt           DateTime      @default(now())
+  dueAt              DateTime
+  paidAt             DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  shipment Shipment  @relation(fields: [shipmentId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [id])
+  payments Payment[]
+
+  @@index([status])
+  @@index([customerId])
+  @@index([issuedAt])
+}
+
+/// Payments are idempotent: the client supplies an Idempotency-Key per attempt.
+model Payment {
+  id             String        @id @default(cuid())
+  invoiceId      String
+  amountCents    Int
+  method         PaymentMethod
+  reference      String?
+  idempotencyKey String        @unique
+  recordedById   String?
+  createdAt      DateTime      @default(now())
+
+  invoice    Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  recordedBy User?   @relation(fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+}
+
+/// Monotonic counters for human-readable numbers (shipment refs, invoice numbers).
+model Sequence {
+  key   String @id
+  value Int    @default(0)
+}

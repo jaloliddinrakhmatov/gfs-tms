@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Typecheck, test & build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gfs_tms_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gfs_tms_test?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @gfs/api exec prisma generate
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: API e2e (PostgreSQL + Redis)
+        working-directory: apps/api
+        run: |
+          cat > .env.test <<ENV
+          NODE_ENV=test
+          DATABASE_URL=${DATABASE_URL}
+          REDIS_URL=redis://localhost:6379/1
+          JWT_ACCESS_SECRET=ci-secret-ci-secret-ci-secret-ci-secret
+          SIMULATOR_ENABLED=false
+          SIMULATOR_AUTOPILOT=false
+          ROUTING_PROVIDER=estimate
+          ENV
+          pnpm test:e2e
+      - run: pnpm build
